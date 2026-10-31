@@ -27,38 +27,64 @@ pipeline {
             }
         }
 
-        stage('Deploy to EC2') {
-            steps {
-                withCredentials([
-                    sshUserPrivateKey(
-                        credentialsId: 'ec2-deploy-key',
-                        keyFileVariable: 'SSH_KEY',
-                        usernameVariable: 'SSH_USER'
-                    )
-                ]) {
-                    powershell '''
-                        scp -i "$env:SSH_KEY" `
-                        -o StrictHostKeyChecking=no `
-                        jenkins-ami-demo/index.html `
-                        "$env:SSH_USER@$env:EC2_HOST:/tmp/index.html"
+        
+stage('Deploy to EC2') {
+    steps {
+        withCredentials([
+            sshUserPrivateKey(
+                credentialsId: 'ec2-deploy-key',
+                keyFileVariable: 'SSH_KEY',
+                usernameVariable: 'SSH_USER'
+            )
+        ]) {
+            powershell '''
+                $ErrorActionPreference = "Stop"
 
-                        if ($LASTEXITCODE -ne 0) {
-                            throw "Upload failed"
-                        }
+                $scp = "C:\\Windows\\System32\\OpenSSH\\scp.exe"
+                $ssh = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
 
-                        ssh -i "$env:SSH_KEY" `
-                        -o StrictHostKeyChecking=no `
-                        "$env:SSH_USER@$env:EC2_HOST" `
-                        "sudo install -m 644 /tmp/index.html /usr/share/nginx/html/index.html"
-
-                        if ($LASTEXITCODE -ne 0) {
-                            throw "Deployment failed"
-                        }
-                    '''
+                if (!(Test-Path $scp)) {
+                    throw "SCP executable not found"
                 }
-            }
+
+                if (!(Test-Path $ssh)) {
+                    throw "SSH executable not found"
+                }
+
+                $source = Join-Path $env:WORKSPACE "jenkins-ami-demo\\index.html"
+
+                if (!(Test-Path $source)) {
+                    throw "HTML file not found: $source"
+                }
+
+                Write-Host "Uploading application to EC2..."
+
+                & $scp -i "$env:SSH_KEY" `
+                    -o StrictHostKeyChecking=no `
+                    "$source" `
+                    "$($env:SSH_USER)@$($env:EC2_HOST):/tmp/index.html"
+
+                if ($LASTEXITCODE -ne 0) {
+                    throw "SCP upload failed"
+                }
+
+                Write-Host "Installing application..."
+
+                & $ssh -i "$env:SSH_KEY" `
+                    -o StrictHostKeyChecking=no `
+                    "$($env:SSH_USER)@$($env:EC2_HOST)" `
+                    "sudo install -m 644 /tmp/index.html /usr/share/nginx/html/index.html"
+
+                if ($LASTEXITCODE -ne 0) {
+                    throw "EC2 deployment failed"
+                }
+
+                Write-Host "Deployment completed!"
+            '''
         }
     }
+}
+
 
     post {
         success {
