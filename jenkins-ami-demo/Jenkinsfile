@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     environment {
-        EC2_HOST = 'YOUR-EC2-PUBLIC-IP'
+        EC2_HOST = '65.1.93.17'
         APP_DIR = 'jenkins-ami-demo'
     }
 
