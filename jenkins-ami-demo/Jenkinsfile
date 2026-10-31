@@ -1,10 +1,10 @@
 
+
 pipeline {
     agent any
 
     environment {
-        EC2_HOST = '65.1.93.17'
-        APP_DIR = 'jenkins-ami-demo'
+        EC2_HOST = 'YOUR-EC2-PUBLIC-IP'
     }
 
     stages {
@@ -27,60 +27,67 @@ pipeline {
             }
         }
 
-        
-stage('Deploy to EC2') {
-    steps {
-        withCredentials([
-            sshUserPrivateKey(
-                credentialsId: 'ec2-deploy-key',
-                keyFileVariable: 'SSH_KEY',
-                usernameVariable: 'SSH_USER'
-            )
-        ]) {
-            powershell '''
-                $ErrorActionPreference = "Stop"
+        stage('Deploy to EC2') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-deploy-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    powershell '''
+                        $ErrorActionPreference = "Stop"
 
-                $scp = "C:\\Windows\\System32\\OpenSSH\\scp.exe"
-                $ssh = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
+                        $scp = "C:\\Windows\\System32\\OpenSSH\\scp.exe"
+                        $ssh = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
 
-                if (!(Test-Path $scp)) {
-                    throw "SCP executable not found"
+                        $source = Join-Path $env:WORKSPACE "jenkins-ami-demo\\index.html"
+
+                        if (!(Test-Path $source)) {
+                            throw "index.html not found: $source"
+                        }
+
+                        if ($env:EC2_HOST -eq "YOUR-EC2-PUBLIC-IP") {
+                            throw "Please enter your actual EC2 public IP"
+                        }
+
+                        Write-Host "Uploading application..."
+
+                        & $scp -i "$env:SSH_KEY" `
+                            -o StrictHostKeyChecking=no `
+                            "$source" `
+                            "$($env:SSH_USER)@$($env:EC2_HOST):/tmp/index.html"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "SCP upload failed"
+                        }
+
+                        Write-Host "Deploying application to EC2..."
+
+                        & $ssh -i "$env:SSH_KEY" `
+                            -o StrictHostKeyChecking=no `
+                            "$($env:SSH_USER)@$($env:EC2_HOST)" `
+                            "sudo install -m 644 /tmp/index.html /usr/share/nginx/html/index.html"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "EC2 deployment failed"
+                        }
+
+                        Write-Host "Deployment completed successfully!"
+                    '''
                 }
+            }
+        }
+    }
 
-                if (!(Test-Path $ssh)) {
-                    throw "SSH executable not found"
-                }
+    post {
+        success {
+            echo 'Application deployed successfully!'
+        }
 
-                $source = Join-Path $env:WORKSPACE "jenkins-ami-demo\\index.html"
-
-                if (!(Test-Path $source)) {
-                    throw "HTML file not found: $source"
-                }
-
-                Write-Host "Uploading application to EC2..."
-
-                & $scp -i "$env:SSH_KEY" `
-                    -o StrictHostKeyChecking=no `
-                    "$source" `
-                    "$($env:SSH_USER)@$($env:EC2_HOST):/tmp/index.html"
-
-                if ($LASTEXITCODE -ne 0) {
-                    throw "SCP upload failed"
-                }
-
-                Write-Host "Installing application..."
-
-                & $ssh -i "$env:SSH_KEY" `
-                    -o StrictHostKeyChecking=no `
-                    "$($env:SSH_USER)@$($env:EC2_HOST)" `
-                    "sudo install -m 644 /tmp/index.html /usr/share/nginx/html/index.html"
-
-                if ($LASTEXITCODE -ne 0) {
-                    throw "EC2 deployment failed"
-                }
-
-                Write-Host "Deployment completed!"
-            '''
+        failure {
+            echo 'Deployment failed. Check Console Output.'
         }
     }
 }
