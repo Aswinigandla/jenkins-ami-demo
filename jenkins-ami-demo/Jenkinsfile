@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+
+    environment {
+        // Replace this value with your EC2 instance's public IPv4 address.
+        EC2_HOST = 'YOUR-EC2-PUBLIC-IP'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo 'Code downloaded from GitHub.'
+            }
+        }
+
+        stage('Build and Test') {
+            steps {
+                script {
+                    if (!fileExists('index.html')) {
+                        error 'index.html was not found in the repository root.'
+                    }
+                }
+                echo 'Basic application check passed.'
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-deploy-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    powershell '''
+                        $ErrorActionPreference = "Stop"
+
+                        scp -i "$env:SSH_KEY" `
+                            -o StrictHostKeyChecking=no `
+                            index.html `
+                            "$env:SSH_USER@$env:EC2_HOST:/tmp/index.html"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "SCP upload failed."
+                        }
+
+                        ssh -i "$env:SSH_KEY" `
+                            -o StrictHostKeyChecking=no `
+                            "$env:SSH_USER@$env:EC2_HOST" `
+                            "sudo install -m 644 /tmp/index.html /usr/share/nginx/html/index.html"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Remote installation failed."
+                        }
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Application deployed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check the Console Output.'
+        }
+    }
+}

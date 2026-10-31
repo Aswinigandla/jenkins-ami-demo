@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My DevOps Application</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, sans-serif;
+      background: #eef4fb;
+      color: #1f2937;
+    }
+    main {
+      width: min(90%, 680px);
+      padding: 48px 28px;
+      text-align: center;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+    }
+    h1 { color: #1769aa; }
+    button {
+      padding: 12px 22px;
+      border: 0;
+      border-radius: 8px;
+      background: #1769aa;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover { background: #12558b; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Welcome to My DevOps Application!</h1>
+    <p>Successfully deployed using Jenkins and AWS EC2.</p>
+    <button onclick="alert('Application is working!')">Test Application</button>
+  </main>
+</body>
+</html>
