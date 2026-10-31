@@ -1,5 +1,4 @@
 
-
 pipeline {
     agent any
 
@@ -22,7 +21,6 @@ pipeline {
                         error 'index.html not found!'
                     }
                 }
-
                 echo 'Application test successful'
             }
         }
@@ -49,7 +47,7 @@ pipeline {
                         }
 
                         if ($env:EC2_HOST -eq "YOUR-EC2-PUBLIC-IP") {
-                            throw "Please enter your actual EC2 public IP"
+                            throw "Enter your actual EC2 public IP"
                         }
 
                         Write-Host "Uploading application..."
@@ -63,7 +61,7 @@ pipeline {
                             throw "SCP upload failed"
                         }
 
-                        Write-Host "Deploying application to EC2..."
+                        Write-Host "Deploying application..."
 
                         & $ssh -i "$env:SSH_KEY" `
                             -o StrictHostKeyChecking=no `
@@ -80,18 +78,6 @@ pipeline {
             }
         }
     }
-
-    post {
-        success {
-            echo 'Application deployed successfully!'
-        }
-
-        failure {
-            echo 'Deployment failed. Check Console Output.'
-        }
-    }
-}
-
 
     post {
         success {
