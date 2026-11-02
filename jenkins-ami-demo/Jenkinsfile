@@ -21,77 +21,90 @@ pipeline {
                         error 'index.html not found!'
                     }
                 }
+
                 echo 'Application test successful'
             }
         }
 
-       
-stage('Deploy to EC2') {
-    steps {
-        withCredentials([
-            sshUserPrivateKey(
-                credentialsId: 'ec2-deploy-key',
-                keyFileVariable: 'SSH_KEY',
-                usernameVariable: 'SSH_USER'
-            )
-        ]) {
-            powershell '''
-                $ErrorActionPreference = "Stop"
+        stage('Deploy to EC2') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-deploy-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    powershell '''
+                        $ErrorActionPreference = "Stop"
 
-                $scp = "C:\\Windows\\System32\\OpenSSH\\scp.exe"
-                $ssh = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
+                        $scp = "C:\\Windows\\System32\\OpenSSH\\scp.exe"
+                        $ssh = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
 
-                $source = Join-Path $env:WORKSPACE "jenkins-ami-demo\\index.html"
+                        $source = Join-Path $env:WORKSPACE "jenkins-ami-demo\\index.html"
 
-                if (!(Test-Path $source)) {
-                    throw "index.html not found: $source"
+                        if (!(Test-Path $source)) {
+                            throw "index.html not found: $source"
+                        }
+
+                        Write-Host "Fixing SSH private key permissions..."
+
+                        $account = (whoami).Trim()
+
+                        & icacls.exe "$env:SSH_KEY" /inheritance:r
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Failed to remove inherited permissions"
+                        }
+
+                        & icacls.exe "$env:SSH_KEY" /grant:r "$($account):(R)"
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Failed to grant private key access"
+                        }
+
+                        Write-Host "Private key permissions updated."
+
+                        Write-Host "Testing EC2 SSH connection..."
+
+                        & $ssh -i "$env:SSH_KEY" `
+                            -o StrictHostKeyChecking=no `
+                            -o BatchMode=yes `
+                            "$($env:SSH_USER)@$($env:EC2_HOST)" `
+                            "echo EC2 connection successful"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "SSH connection failed"
+                        }
+
+                        Write-Host "Uploading application..."
+
+                        & $scp -i "$env:SSH_KEY" `
+                            -o StrictHostKeyChecking=no `
+                            -o BatchMode=yes `
+                            "$source" `
+                            "$($env:SSH_USER)@$($env:EC2_HOST):/tmp/index.html"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "SCP upload failed"
+                        }
+
+                        Write-Host "Deploying application to Nginx..."
+
+                        & $ssh -i "$env:SSH_KEY" `
+                            -o StrictHostKeyChecking=no `
+                            -o BatchMode=yes `
+                            "$($env:SSH_USER)@$($env:EC2_HOST)" `
+                            "sudo install -m 644 /tmp/index.html /usr/share/nginx/html/index.html"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "EC2 deployment failed"
+                        }
+
+                        Write-Host "Deployment completed successfully!"
+                    '''
                 }
-
-                Write-Host "Fixing SSH private key permissions..."
-
-                $account = (whoami).Trim()
-
-                icacls "$env:SSH_KEY" /inheritance:r
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Failed to remove inherited permissions"
-                }
-
-                icacls "$env:SSH_KEY" /grant:r "$($account):(R)"
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Failed to grant private key access"
-                }
-
-                Write-Host "Private key permissions updated."
-
-                Write-Host "Uploading application..."
-
-                & $scp -i "$env:SSH_KEY" `
-                    -o StrictHostKeyChecking=no `
-                    -o BatchMode=yes `
-                    "$source" `
-                    "$($env:SSH_USER)@$($env:EC2_HOST):/tmp/index.html" 2>&1
-
-                if ($LASTEXITCODE -ne 0) {
-                    throw "SCP upload failed"
-                }
-
-                Write-Host "Deploying application..."
-
-                & $ssh -i "$env:SSH_KEY" `
-                    -o StrictHostKeyChecking=no `
-                    -o BatchMode=yes `
-                    "$($env:SSH_USER)@$($env:EC2_HOST)" `
-                    "sudo install -m 644 /tmp/index.html /usr/share/nginx/html/index.html" 2>&1
-
-                if ($LASTEXITCODE -ne 0) {
-                    throw "EC2 deployment failed"
-                }
-
-                Write-Host "Deployment completed successfully!"
-            '''
+            }
         }
     }
-}
 
     post {
         success {
@@ -100,6 +113,10 @@ stage('Deploy to EC2') {
 
         failure {
             echo 'Deployment failed. Check Console Output.'
+        }
+
+        always {
+            echo 'Jenkins pipeline execution finished.'
         }
     }
 }
