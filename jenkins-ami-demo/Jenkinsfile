@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     environment {
-        EC2_HOST = 'YOUR-EC2-PUBLIC-IP'
+        EC2_HOST = '13.234.120.50'
     }
 
     stages {
